@@ -91,23 +91,34 @@ module Akami
 
     # Returns the XML for a WSSE header.
     def to_xml
-      h = wsse_signature if signature? && signature.have_document?
-      h = merge_hashes_with_keys(h, wsse_username_token) if username_token?
-      h = merge_hashes_with_keys(h, wsu_timestamp) if timestamp?
-
-      return '' unless h
-      Gyoku.xml h
+      if signature? and signature.have_document?
+        Gyoku.xml wsse_signature.merge!(hash)
+      elsif username_token? && timestamp?
+        sec = wsse_username_token.merge!(wsu_timestamp) {
+          |key, v1, v2| v1.merge!(v2) {
+            |key, v1, v2| v1.merge!(v2)
+          }
+        }
+        sec['wsse:Security'].merge! :order! =>['wsu:Timestamp','wsse:UsernameToken']
+        Gyoku.xml sec
+      elsif username_token?
+        Gyoku.xml wsse_username_token.merge!(hash)
+      elsif timestamp?
+        Gyoku.xml wsu_timestamp.merge!(hash)
+      else
+        ""
+      end
     end
 
-  private
+    private
 
-    def merge_hashes_with_keys(hash_one, hash_two)
-      return hash_two unless hash_one
-      keys = hash_one["wsse:Security"][:order!] | hash_two["wsse:Security"][:order!]
-      hash_one.deep_merge! hash_two
-      hash_one["wsse:Security"][:order!] = keys
-      hash_one
-    end
+    # def merge_hashes_with_keys(hash_one, hash_two)
+    #   return hash_two unless hash_one
+    #   keys = hash_one["wsse:Security"][:order!] | hash_two["wsse:Security"][:order!]
+    #   hash_one.deep_merge! hash_two
+    #   hash_one["wsse:Security"][:order!] = keys
+    #   hash_one
+    # end
 
     # Returns a Hash containing wsse:UsernameToken details.
     def wsse_username_token
